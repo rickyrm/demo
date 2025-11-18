@@ -31,6 +31,17 @@ Contexto: según el `PRD` el blog necesita generar slugs amigables a partir de l
 - **Quiero** asegurar que los slugs sean únicos en la base de datos
 - **Para que** no existan URLs duplicadas; en caso de colisión proponer sufijo incremental (`-2`, `-3`, ...).
 
+### Historia 5 — Persistir POST como archivo Markdown nombrado por el slug
+- **Como** desarrollador / sistema de contenido
+- **Quiero** que cuando se cree un post vía `POST /api/v1/posts` se guarde el body recibido en un archivo `.md` cuyo nombre sea el `slug` (por ejemplo `mi-entrada.md`)
+- **Para que** exista una copia legible y portátil del contenido que pueda usarse para backups, migraciones, o publicación estática.
+
+Detalle:
+- El archivo debe almacenarse en una ubicación configurable (por ejemplo `content/posts/` o un bucket S3).
+- El nombre del archivo será `{slug}.md`, donde `slug` es el valor final persistido (generado o proporcionado y validado).
+- El contenido del archivo deberá incluir metadatos frontmatter (YAML) con `title`, `slug`, `metaDescription`, `status`, `publishedAt` cuando aplique, seguido del `content` en formato Markdown.
+- La operación de persistir el archivo deberá ser atómica respecto a la creación del post: si la escritura falla, la creación en la base de datos deberá revertirse o indicarse claramente la inconsistencia y retornar `5xx`.
+
 ## 2. 🧑‍💻 Solution Design
 
 ### Resumen de la solución
@@ -118,6 +129,17 @@ Contexto: según el `PRD` el blog necesita generar slugs amigables a partir de l
   - SHALL: Cuando `slugify(title)` produce un `slug` ya existente
   - IF: `posts.slug` ya contiene ese valor
   - THEN: El sistema SHALL proponer y persistir un `slug` con sufijo incremental (`-2`, `-3`...) garantizando unicidad; en caso de race condition, la operación SHALL reintentar hasta N intentos y fallar con `409 Conflict` si persiste.
+
+- Historia 5 — Persistir POST como archivo Markdown:
+  - SHALL: Cuando se cree un post vía `POST /api/v1/posts` y se persista el recurso en la base de datos
+  - WHEN: El request incluye `title` y `content` (y opcionalmente `slug`)
+  - THEN: El sistema SHALL escribir un archivo `{slug}.md` en la ubicación de almacenamiento configurada (por ejemplo `content/posts/` o bucket S3) cuyo contenido incluya:
+    - Frontmatter YAML con `title`, `slug`, `metaDescription`, `status`, `publishedAt` cuando aplique
+    - El `content` en formato Markdown después del frontmatter
+  - AND: El nombre del archivo SHALL coincidir exactamente con el `slug` persistido por el sistema (post-generación/validación).
+  - AND: La operación SHALL ser atómica respecto a la creación del post: si la escritura del archivo falla, la creación en la base de datos deberá revertirse o la API deberá responder con un error `5xx` indicando inconsistencia.
+  - AND: El sistema SHALL devolver `201 Created` sólo si ambos persistimientos (BD + archivo) se completan correctamente; si se detecta inconsistencia, SHALL dejar evidencia en logs y métricas (por ejemplo `post_file_persist_failures_total`).
+  - AND: El archivo SHALL guardarse con codificación UTF-8 y protegerse contra path traversal en el `slug`.
 
 ## Deliverables
 
