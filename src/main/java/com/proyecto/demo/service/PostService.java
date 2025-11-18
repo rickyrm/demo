@@ -16,6 +16,13 @@ import static org.springframework.http.HttpStatus.CONFLICT;
 
 @Service
 public class PostService {
+    public void savePost(Post post) {
+        postRepository.save(post);
+    }
+
+    public void deletePostById(UUID id) {
+        postRepository.deleteById(id);
+    }
 
     private final InMemoryPostRepository postRepository;
     private final InMemorySlugRedirectRepository redirectRepository;

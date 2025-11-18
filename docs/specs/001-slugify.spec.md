@@ -36,8 +36,12 @@ Contexto: según el `PRD` el blog necesita generar slugs amigables a partir de l
 - **Quiero** que cuando se cree un post vía `POST /api/v1/posts` se guarde el body recibido en un archivo `.md` cuyo nombre sea el `slug` (por ejemplo `mi-entrada.md`)
 - **Para que** exista una copia legible y portátil del contenido que pueda usarse para backups, migraciones, o publicación estática.
 
+### Historia 6 — Transformación de título a slug vía endpoint
+- **Como** desarrollador o integrador
+- **Quiero** disponer de un endpoint `POST /api/v1/posts/slugify` que reciba un título y devuelva el slug generado
+- **Para que** pueda obtener el slug SEO-friendly antes de crear el post, facilitando validaciones y previsualizaciones en el frontend o integraciones externas.
+
 Detalle:
-- El archivo debe almacenarse en una ubicación configurable (por ejemplo `content/posts/` o un bucket S3).
 - El nombre del archivo será `{slug}.md`, donde `slug` es el valor final persistido (generado o proporcionado y validado).
 - El contenido del archivo deberá incluir metadatos frontmatter (YAML) con `title`, `slug`, `metaDescription`, `status`, `publishedAt` cuando aplique, seguido del `content` en formato Markdown.
 - La operación de persistir el archivo deberá ser atómica respecto a la creación del post: si la escritura falla, la creación en la base de datos deberá revertirse o indicarse claramente la inconsistencia y retornar `5xx`.
@@ -55,6 +59,8 @@ Detalle:
 - Comprobará unicidad contra la tabla `posts.slug`; en caso de conflicto añadirá sufijo incremental.
 - Permitir edición manual del slug en el API con las mismas validaciones.
 - Si se modifica el slug de una entrada publicada, crear registro de redirección 301 y guardar historial.
+
+Además, se implementará un endpoint `POST /api/v1/posts/slugify` que recibirá un título y devolverá el slug generado aplicando las mismas reglas de `slugify` (transliteración, minúsculas, reemplazo de espacios, limpieza, truncado a 100 caracteres, sin comprobación de unicidad). Este endpoint no persiste el slug ni el post, solo transforma y responde el slug SEO-friendly.
 
 ### Data models
 
@@ -84,6 +90,11 @@ Detalle:
   - Behavior: si `slug` cambia y `status==PUBLISHED` crear `SlugRedirect` y marcar para 301.
 
 - `GET /api/v1/posts/slug-available?slug=...` — chequear disponibilidad
+
+- `POST /api/v1/posts/slugify` — transforma título en slug
+  - Request: `{ title }`
+  - Response: `{ slug }`
+  - Behavior: aplica las reglas de `slugify` y retorna el slug generado, sin persistencia ni comprobación de unicidad.
 
 ### Componentes de software
 
@@ -140,6 +151,11 @@ Detalle:
   - AND: La operación SHALL ser atómica respecto a la creación del post: si la escritura del archivo falla, la creación en la base de datos deberá revertirse o la API deberá responder con un error `5xx` indicando inconsistencia.
   - AND: El sistema SHALL devolver `201 Created` sólo si ambos persistimientos (BD + archivo) se completan correctamente; si se detecta inconsistencia, SHALL dejar evidencia en logs y métricas (por ejemplo `post_file_persist_failures_total`).
   - AND: El archivo SHALL guardarse con codificación UTF-8 y protegerse contra path traversal en el `slug`.
+
+- Historia 6 — Transformación de título a slug vía endpoint:
+  - SHALL: Cuando un desarrollador o integrador envía un título al endpoint
+  - WHEN: Se invoca `POST /api/v1/posts/slugify` con un campo `title` válido
+  - THEN: El sistema SHALL retornar el slug generado aplicando las reglas de transliteración, minúsculas, reemplazo de espacios, limpieza y truncado a 100 caracteres, sin persistir ni comprobar unicidad.
 
 ## Deliverables
 
